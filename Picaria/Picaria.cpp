@@ -42,6 +42,8 @@ Picaria::Picaria(QWidget *parent)
     QObject::connect(modeGroup, SIGNAL(triggered(QAction*)), this, SLOT(updateMode(QAction*)));
     QObject::connect(this, SIGNAL(modeChanged(Picaria::Mode)), this, SLOT(reset()));
     QObject::connect(ui->actionAbout, SIGNAL(triggered(bool)), this, SLOT(showAbout()));
+    QObject::connect(this, SIGNAL(gameOver(Player)), this, SLOT(showGameOver(Player)));
+    QObject::connect(this, SIGNAL(gameOver(Player)), this, SLOT(reset()));
 
     QSignalMapper* map = new QSignalMapper(this);
     for (int id = 0; id < 13; ++id) {
@@ -82,30 +84,74 @@ void Picaria::switchPlayer() {
     this->updateStatusBar();
 }
 
+int Picaria::getId(Hole* hole){
+    for(int i=0;i<13;i++)
+        if(m_holes[i] == hole)
+            return i;
+    return -1;
+}
+
+int Picaria::getNeighborId(int id, Picaria::Direction direction){
+    QList<Hole*> test;
+    int matrix_ThirteenHoles[13][8] = {{-1,-1, 1, 3, 5,-1,-1,-1},
+                                       {-1,-1, 2, 4, 6, 3, 0,-1},
+                                       {-1,-1,-1,-1, 7, 4, 1,-1},
+
+                                       {-1, 1,-1, 6,-1, 5,-1, 0},
+                                       {-1, 2,-1, 7,-1, 6,-1, 1},
+
+                                       { 0, 3, 6, 8,10,-1,-1,-1},
+                                       { 1, 4, 7, 9,11, 8, 5, 3},
+                                       { 2,-1,-1,-1,12, 9, 6, 4},
+
+                                       {-1, 6,-1,11,-1,10,-1, 5},
+                                       {-1, 7,-1,12,-1,11,-1, 6},
+
+                                       { 5, 8,11,-1,-1,-1,-1,-1},
+                                       { 6, 9,12,-1,-1,-1,10, 8},
+                                       { 7,-1,-1,-1,-1,-1,11, 9}};
+
+    int matrix_NineHoles[13][8] = {{-1,-1, 1, 6, 5,-1,-1,-1},
+                                   {-1,-1, 2,-1, 6,-1, 0,-1},
+                                   {-1,-1,-1,-1, 7, 2, 1,-1},
+
+                                   {-1,-1,-1,-1,-1,-1,-1,-1},
+                                   {-1,-1,-1,-1,-1,-1,-1,-1},
+
+                                   { 0,-1, 6,-1,10,-1,-1,-1},
+                                   { 1, 2, 7,12,11,10, 5, 0},
+                                   { 2,-1,-1,-1,12,-1, 6,-1},
+
+                                   {-1,-1,-1,-1,-1,-1,-1,-1},
+                                   {-1,-1,-1,-1,-1,-1,-1,-1},
+
+                                   { 5, 6,11,-1,-1,-1,-1,-1},
+                                   { 6,-1,12,-1,-1,-1,10,-1},
+                                   { 7,-1,-1,-1,-1,-1,11, 6}};
+
+    if(m_mode == Picaria::ThirteenHoles)
+        return matrix_ThirteenHoles[id][direction];
+    else
+        return matrix_NineHoles[id][direction];
+}
+
 Hole* Picaria::getNeighborHole(int id, Picaria::Direction direction){
-    int index = -1;
-
-    int matrix[13][8] = {{-1,-1, 1, 2, 3,-1,-1,-1},
-                  {-1,-1, 2, 4, 6, 3, 0,-1},
-                  {-1,-1,-1,-1, 7, 4, 1,-1},
-                  {-1, 1, 4, 6, 8, 5,-1, 0},
-                  {-1, 2,-1, 7, 9, 6, 3, 1},
-                  { 0, 3, 6, 8,10,-1,-1,-1},
-                  { 1, 4, 7, 9,11, 8, 5, 3},
-                  { 2,-1,-1,-1,12, 9, 6, 4},
-                  { 3, 6, 9,11,-1,10,-1, 5},
-                  { 4, 7,-1,12,-1,11, 8, 6},
-                  { 5, 8,11,-1,-1,-1,-1,-1},
-                  { 6, 9,12,-1,-1,-1,10, 8},
-                  { 7,-1,-1,-1,-1,-1,11, 9}};
-
-    index = matrix[id][direction];
-    m_holes[id]->setState(Hole::SelectableState);
-    qDebug() << index;
+    int index = getNeighborId(id, direction);
     if (index != -1) {
         return m_holes[index];
-    } else{
-        return 0;
+    } else {
+        return nullptr;
+    };
+}
+
+Hole* Picaria::getNeighborHole(Hole* hole, Picaria::Direction direction){
+    if (hole == nullptr)
+        return nullptr;
+    int index = getNeighborId(getId(hole), direction);
+    if (index != -1) {
+        return m_holes[index];
+    } else {
+        return nullptr;
     };
 }
 
@@ -126,15 +172,74 @@ void Picaria::play(int id) {
         }
 }
 
-void Picaria::move(int id){
-    QPair<Hole*,Hole*>* movement = nullptr;
-    Hole* hole = m_holes[id];
-    getNeighborHole(id,Picaria::North);
-    if (hole->state() == Hole::SelectableState) {
-        Q_ASSERT(m_selected != 0);
-        movement = new QPair<Hole*,Hole*>(m_selected, hole);
-    }
+bool Picaria::isGameOver(Hole* hole){
+    bool v1 = confereVitoria(getNeighborHole(hole,Picaria::West),hole,getNeighborHole(hole,Picaria::East));
+    bool v2 = confereVitoria(getNeighborHole(hole,Picaria::North),hole,getNeighborHole(hole,Picaria::South));
+    bool v3 = confereVitoria(getNeighborHole(hole,Picaria::Northwest),hole,getNeighborHole(hole,Picaria::Southeast));
+    bool v4 = confereVitoria(getNeighborHole(hole,Picaria::Southwest),hole,getNeighborHole(hole,Picaria::Northeast));
+
+    bool v5 = confereVitoria(hole,getNeighborHole(hole,Picaria::North),getNeighborHole(getNeighborHole(hole,Picaria::North),Picaria::North));
+    bool v6 = confereVitoria(hole,getNeighborHole(hole,Picaria::Northeast),getNeighborHole(getNeighborHole(hole,Picaria::Northeast),Picaria::Northeast));
+    bool v7 = confereVitoria(hole,getNeighborHole(hole,Picaria::East),getNeighborHole(getNeighborHole(hole,Picaria::East),Picaria::East));
+    bool v8 = confereVitoria(hole,getNeighborHole(hole,Picaria::Southeast),getNeighborHole(getNeighborHole(hole,Picaria::Southeast),Picaria::Southeast));
+
+    bool v9 = confereVitoria(hole,getNeighborHole(hole,Picaria::South),getNeighborHole(getNeighborHole(hole,Picaria::South),Picaria::South));
+    bool v10 = confereVitoria(hole,getNeighborHole(hole,Picaria::Southwest),getNeighborHole(getNeighborHole(hole,Picaria::Southwest),Picaria::Southwest));
+    bool v11 = confereVitoria(hole,getNeighborHole(hole,Picaria::West),getNeighborHole(getNeighborHole(hole,Picaria::West),Picaria::West));
+    bool v12 = confereVitoria(hole,getNeighborHole(hole,Picaria::Northwest),getNeighborHole(getNeighborHole(hole,Picaria::Northwest),Picaria::Northwest));
+    return (v1 || v2 || v3 || v4 || v5 || v6 || v7 || v8 || v9 || v10 || v11 || v12);
 }
+
+bool Picaria::confereVitoria(Hole* hole1, Hole* hole2, Hole* hole3){
+    if(hole1 != nullptr && hole2 != nullptr && hole3 != nullptr){
+        Hole::State state = hole1->state();
+        if(state == Hole::BlueState || state == Hole::RedState){
+            return (hole2->state() == state && hole3->state() == state);
+        }
+    }
+    return false;
+}
+
+
+void Picaria::move(int id){
+    Hole* hole = m_holes[id];
+    QPair<Hole*,Hole*>* movement = nullptr;
+        if (hole->state() == Hole::SelectableState) {
+            Q_ASSERT(m_selected != 0);
+            movement = new QPair<Hole*,Hole*>(m_selected, hole);
+        } else {
+            if (hole->state() == player2state(m_player)) {
+                QList<Hole*> selectable = this->findSelectable(id);
+                if (selectable.count() == 1) {
+                    movement = new QPair<Hole*,Hole*>(hole, selectable.at(0));
+                } else if (selectable.count() > 1) {
+                    this->clearSelectable();
+                    foreach (Hole* tmp, selectable)
+                        tmp->setState(Hole::SelectableState);
+
+                    m_selected = hole;
+                }
+            }
+        }
+
+        if (movement != nullptr) {
+            this->clearSelectable();
+            m_selected = 0;
+
+            Q_ASSERT(movement->first->state() == player2state(m_player));
+            Q_ASSERT(movement->second->state() == Hole::EmptyState);
+
+            movement->first->setState(Hole::EmptyState);
+            movement->second->setState(player2state(m_player));
+
+            if (isGameOver(movement->second))
+                emit gameOver(m_player);
+            else
+                this->switchPlayer();
+
+            delete movement;
+        }
+    }
 
 void Picaria::drop(Hole* hole) {
     if (hole->state() == Hole::EmptyState){
@@ -171,6 +276,7 @@ void Picaria::reset() {
     // Reset the player and phase.
     m_player = Picaria::RedPlayer;
     m_phase = Picaria::DropPhase;
+    m_dropCount = 0;
 
     // Finally, update the status bar.
     this->updateStatusBar();
@@ -184,13 +290,49 @@ void Picaria::clearSelectable() {
     }
 }
 
-/*QList<Hole*> Picaria::findSelectable(Hole* hole) {
+bool isSelectable(Hole* hole) {
+    return hole != nullptr &&
+            (hole->state() == Hole::EmptyState ||
+             hole->state() == Hole::SelectableState);
+}
+
+QList<Hole*> Picaria::findSelectable(int id) {
     QList<Hole*> list;
 
-    Hole* left;
-    int aux
+    Hole* north = getNeighborHole(id,Picaria::North);
+    if (isSelectable(north))
+        list << north;
+
+    Hole* northeast = getNeighborHole(id,Picaria::Northeast);
+    if (isSelectable(northeast))
+        list << northeast;
+
+    Hole* east = getNeighborHole(id,Picaria::East);
+    if (isSelectable(east))
+        list << east;
+
+    Hole* southeast = getNeighborHole(id,Picaria::Southeast);
+    if (isSelectable(southeast))
+        list << southeast;
+
+    Hole* south = getNeighborHole(id,Picaria::South);
+    if (isSelectable(south))
+        list << south;
+
+    Hole* southwest = getNeighborHole(id,Picaria::Southwest);
+    if (isSelectable(southwest))
+        list << southwest;
+
+    Hole* west = getNeighborHole(id,Picaria::West);
+    if (isSelectable(west))
+        list << west;
+
+    Hole* northwest = getNeighborHole(id,Picaria::Northwest);
+    if (isSelectable(northwest))
+        list << northwest;
+
     return list;
-}*/
+}
 
 void Picaria::showAbout() {
     QMessageBox::information(this, tr("About"), tr("Picaria\n\nRodrigo Lopes - 20193017107\n\nHenrique Coelho - ___"));
