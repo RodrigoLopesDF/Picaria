@@ -67,17 +67,16 @@ private:
     Hole* m_selected;
 
     void switchPlayer();
-    QList<Hole*> findSelectable(int id);
+    QList<Hole*> findSelectable(Hole * hole);
     bool confereVitoria(Hole* hole1, Hole* hole2, Hole* hole3);
     bool isGameOver(Hole* hole);
     int getId(Hole* hole);
 
 private slots:
-    Hole* getNeighborHole(int id, Direction direction);
     Hole* getNeighborHole(Hole* hole, Direction direction);
     int getNeighborId(int id, Direction direction);
     void play(int id);
-    void move(int id);
+    void move(Hole* hole);
     void drop(Hole* hole);
     void reset();
 
